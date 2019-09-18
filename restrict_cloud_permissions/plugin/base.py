@@ -1,2 +1,6 @@
 class Plugin:
-    pass
+    def create_tracking_infrastructure(self):
+        raise NotImplementedError
+
+    def delete_tracking_infrastructure(self):
+        raise NotImplementedError
