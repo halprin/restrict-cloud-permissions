@@ -7,3 +7,6 @@ class TestPlugin(Plugin):
 
     def delete_tracking_infrastructure(self):
         pass
+
+    def record_events(self, entity, from_datetime, to_datetime):
+        pass
