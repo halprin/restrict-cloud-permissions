@@ -4,3 +4,6 @@ class ApplicationContext:
 
     def cloud_plugin(self):
         raise NotImplementedError
+
+    def cloud_sdk(self):
+        raise NotImplementedError
