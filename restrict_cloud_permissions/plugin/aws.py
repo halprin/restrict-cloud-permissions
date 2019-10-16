@@ -28,7 +28,7 @@ class AwsPlugin(Plugin):
             .map(lambda item: json.loads(item['CloudTrailEvent'])) \
             .filter(lambda event: 'errorCode' not in event) \
             .map(self._parse_event) \
-            .reduce(self._cumulate_by_resource)
+            .reduce(self._cumulate_by_resource, initial={})
 
         permission_model = {
             'Version': '2012-10-17',
@@ -48,14 +48,6 @@ class AwsPlugin(Plugin):
         return json.dumps(permission_model, indent=4)
 
     def _cumulate_by_resource(self, cumulator, event):
-        if cumulator.get('action', None) is not None:
-            # it is the first item
-            event0 = cumulator
-            cumulator = {}
-            # Add the event0's action to the set that belongs to each resource
-            iterator_chain.from_iterable(event0['resources']) \
-                .for_each(lambda resource: cumulator.setdefault(resource, set()).add(event['action']))
-
         # Add the event's action to the set that belongs to each resource
         iterator_chain.from_iterable(event['resources']) \
             .for_each(lambda resource: cumulator.setdefault(resource, set()).add(event['action']))
@@ -64,9 +56,14 @@ class AwsPlugin(Plugin):
 
     def _parse_event(self, event):
         action = self._create_action(event['eventSource'], event['eventName'])
-        # This only goes so far.  There are other actions that require a resource, but the event doesn't provide a 'resource' key.  Do I need to somehow parse 'requestParameters'?
+        action = self._action_conversion(action)
+        # TODO: Look into this more.  I could swear there are other actions that require a resource, but the event doesn't provide a 'resource' key.  But perhaps it all works?  If it doesn't work, do I need to somehow parse 'requestParameters'?
         resources = iterator_chain.from_iterable(event.get('resources', [])).map(
             lambda resource: resource['ARN']).list()
+
+        if len(resources) == 0:
+            # have actions that have no resource default to all resources
+            resources = ['*']
 
         return {
             'action': action,
@@ -75,6 +72,18 @@ class AwsPlugin(Plugin):
 
     def _create_action(self, event_source, event_name):
         return '{}:{}'.format(event_source.split('.')[0], event_name)
+
+    def _action_conversion(self, action):
+        # TODO: missing many conversions.  Not everything needs a conversion though
+        # The API event name -> The IAM permission action
+        action_conversion = {
+            's3:ListBuckets': 's3:ListAllMyBuckets',
+            's3:ListObjectsV2': 's3:ListBucket',
+            's3:HeadBucket': 's3:ListBucket',
+            's3:ListObjectVersions': 's3:ListBucketVersions',
+            's3:ListMultipartUploads': 's3:ListBucketMultipartUploads',
+        }
+        return action_conversion.get(action, action)
 
     def _lookup_events(self, entity, from_datetime, to_datetime, next_token=None):
         if next_token:
